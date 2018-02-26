@@ -17,37 +17,123 @@
     let moveLeft = false;
 
     let room = {};
+    let timer;
 
-    const update = (data) => {
-        if(!room[data.name]){
-            room[data.name] = data;
+const setUser = (data, lobby) => {
+    hash = data.hash;
+    room = lobby;
+    console.dir(room);
+    console.log(hash);
+};
+
+const update = (data) => {
+        if(!room.players[data.hash]){
+            room.players[data.hash] = data;
             return;
         }
-        
-    const player = room[data.name];
+
+    const player = room.players[data.hash];
 
     if(player.lastUpdate >= data.lastUpdate){
         return;
     }
 
     player.lastUpdate = data.lastUpdate;
+
+    player.prevX = data.prevX;
+    player.prevY = data.prevY;
+    player.destX = data.destX;
+    player.destY = data.destY;
+    player.alpha = 0.05;
 };
 
-const setUser = (data) => {
-    hash = data.hash;
-    room[hash] = data;
-    
-    //requestAnimationFrame(redraw);
-};
 
 const errorEmitter = (error) => {
     const errorContiner = document.querySelector("#error");
     errorContiner.innerHTML = error;
 };
 
-const roomJoined = (roomName) => {
+const lerp = (v0, v1, alpha) => {
+    return (1-alpha) * v0 + alpha * v1;
+};
+
+const updatePosition = () => {
+    const player = room.players[hash];
+    player.prevX = player.x;
+    player.prevY = player.y;
+    
+    if(moveUp && player.destY > 0){
+        player.destY -= 2;
+    }
+    
+    if(moveDown && player.destY < 500){
+        player.destY += 2;
+    }
+    
+    if(moveLeft && player.destX > 0){
+        player.destX -= 2;
+    }
+    
+    if(moveRight && player.destX < 700){
+        player.destX += 2;
+    }
+    
+    player.alpha = 0.05;
+};
+
+const redraw = (time) => {
+    updatePosition();
+    updateMovement();
+    const keys = Object.keys(room.players);
+    
+    for(let i = 0; i< keys.length; i++){
+        const player = room.players[keys[i]];
+        
+        if(player.alpha < 1){
+            player.alpha += 0.05;
+        }
+        
+        ctx.fillStyle = player.color;
+        
+        player.x = lerp(player.prevX, player.destX, player.alpha);
+        player.y = lerp(player.prevY, player.destY, player.alpha);
+        
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+    }
+    
+    if(room.status === 'waiting'){
+        requestAnimationFrame(redraw);
+    }
+    else{
+        clearCanvas();
+    }
+};
+
+const updateMovement = () => {
+          socket.emit('movementUpdate', room.players[hash]);
+};
+
+
+const roomJoined = (reqRoom) => {
     const roomNameLabel = document.querySelector("#roomName");
-    roomNameLabel.textContent = `Room: ${roomName}`;
+    roomNameLabel.textContent = `Room: ${reqRoom.roomName}`;
+    room = {};
+    room = reqRoom;
+    requestAnimationFrame(redraw);
+    console.dir(room);
+};
+
+const updateTime = (time) => {
+    room.time = time;
+    timer.textContent = `Time: ${room.time}`;
+};
+
+const gameStart = () => {
+    
+};
+
+const gameFinished = () => {
+    
 };
 
 const joinRoom = (e, roomName, create) => {
@@ -65,11 +151,57 @@ const joinRoom = (e, roomName, create) => {
     
     e.preventDefault();
     return false;
-}
+};
+
+
+const keyDownHandler = (e) => {  
+          var keyPressed = e.which;
+
+          if(keyPressed === 87 || keyPressed === 38) {
+            moveUp = true;
+          }
+
+          else if(keyPressed === 65 || keyPressed === 37) {
+            moveLeft = true;
+          }
+
+          else if(keyPressed === 83 || keyPressed === 40) {
+            moveDown = true;
+          }
+
+          else if(keyPressed === 68 || keyPressed === 39) {
+            moveRight = true;
+          }
+    
+          if(moveUp || moveDown || moveLeft || moveRight || keyPressed === 46) {
+            e.preventDefault();
+          }
+        };
+
+const keyUpHandler = (e) => {
+          var keyPressed = e.which;
+
+          if(keyPressed === 87 || keyPressed === 38) {
+            moveUp = false;
+          }
+
+          else if(keyPressed === 65 || keyPressed === 37) {
+            moveLeft = false;
+          }
+
+          else if(keyPressed === 83 || keyPressed === 40) {
+            moveDown = false;
+          }
+
+          else if(keyPressed === 68 || keyPressed === 39) {
+            moveRight = false;
+          }
+    
+        };
 
 
 const clearCanvas = (data) => {
-    ctx.clearRect(0,0,500,500);
+    ctx.clearRect(0,0,600,800);
 };
         
         const init = () => {
@@ -82,7 +214,11 @@ const clearCanvas = (data) => {
             
             socket.on('roomError', errorEmitter);
             
+            socket.on('updateTime', updateTime);
             socket.on('roomJoined', roomJoined);
+            socket.on('gameStart', gameStart);
+            socket.on('gameFinished', gameFinished);
+            socket.on('updatedMovement', update);
             
             const createRoomForm = document.querySelector('#createRoomForm');
             const sendCreateReq = (e) => joinRoom(e, createRoomForm.querySelector("#createRoomField").value, true);
@@ -92,8 +228,10 @@ const clearCanvas = (data) => {
             const sendJoinReq = (e) => joinRoom(e, joinRoomForm.querySelector("#joinRoomField").value, false);
             joinRoomForm.addEventListener('submit', sendJoinReq);
             
+            timer = document.querySelector('#timer');
             
-
+            document.body.addEventListener('keydown', keyDownHandler);
+            document.body.addEventListener('keyup', keyUpHandler);
         };
         
         window.onload = init;
@@ -118,8 +256,9 @@ const clearCanvas = (data) => {
     
     
     <div id="canvasContainer">
-        <h2 id="roomName">Room: </h2>
+        <h2 id="roomName">Room: lobby</h2>
         <canvas id="canvas" width="800" height="600" style="border:1px solid #000000;"></canvas>
+        <h2 id="timer">Time: ???</h2>
     </div>
 </body>
 </html>
