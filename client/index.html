@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://npmcdn.com/babel-core@5.8.38/browser.min.js"></script>
+    <script type="text/babel" >
+        "use strict";
+    let canvas;
+    let ctx;
+
+    let socket;
+    let hash;
+
+    let moveDown = false;
+    let moveUp = false;
+    let moveRight = false;
+    let moveLeft = false;
+
+    let room = {};
+
+    const update = (data) => {
+        if(!room[data.name]){
+            room[data.name] = data;
+            return;
+        }
+        
+    const player = room[data.name];
+
+    if(player.lastUpdate >= data.lastUpdate){
+        return;
+    }
+
+    player.lastUpdate = data.lastUpdate;
+};
+
+const setUser = (data) => {
+    hash = data.hash;
+    room[hash] = data;
+    
+    //requestAnimationFrame(redraw);
+};
+
+const errorEmitter = (error) => {
+    const errorContiner = document.querySelector("#error");
+    errorContiner.innerHTML = error;
+};
+
+const roomJoined = (roomName) => {
+    const roomNameLabel = document.querySelector("#roomName");
+    roomNameLabel.textContent = `Room: ${roomName}`;
+};
+
+const joinRoom = (e, roomName, create) => {
+    if(create){
+        socket.emit('createRoom', roomName);
+    }
+    
+    else{
+        socket.emit('joinRoom', roomName);
+    }
+    
+    const errorContiner = document.querySelector("#error");
+    
+    errorContiner.innerHTML = "";
+    
+    e.preventDefault();
+    return false;
+}
+
+
+const clearCanvas = (data) => {
+    ctx.clearRect(0,0,500,500);
+};
+        
+        const init = () => {
+            canvas = document.getElementById("canvas");
+            ctx = canvas.getContext("2d");
+            
+            socket = io.connect();
+            
+            socket.on('joined', setUser);
+            
+            socket.on('roomError', errorEmitter);
+            
+            socket.on('roomJoined', roomJoined);
+            
+            const createRoomForm = document.querySelector('#createRoomForm');
+            const sendCreateReq = (e) => joinRoom(e, createRoomForm.querySelector("#createRoomField").value, true);
+            createRoomForm.addEventListener('submit', sendCreateReq);
+            
+            const joinRoomForm = document.querySelector('#joinRoomForm');
+            const sendJoinReq = (e) => joinRoom(e, joinRoomForm.querySelector("#joinRoomField").value, false);
+            joinRoomForm.addEventListener('submit', sendJoinReq);
+            
+            
+
+        };
+        
+        window.onload = init;
+    </script>
+</head>
+<body>
+    <div id="errorContainer">
+        <section id="error"> </section>
+    </div>
+    <div id="roomContainer">
+        <form id="createRoomForm">
+            <label for="createRoom">Create a Room</label>
+            <input id="createRoomField" type="text" name="createRoom" maxlength="4" size="4">
+            <input type="submit" value="Create Room">
+        </form>
+        <form id="joinRoomForm">
+            <label for="joinRoom">Join a Room</label>
+            <input id="joinRoomField" type="text" name="joinRoom" maxlength="4" size ="4">
+            <input type="submit" value="Join Room">
+        </form>
+    </div>
+    
+    
+    <div id="canvasContainer">
+        <h2 id="roomName">Room: </h2>
+        <canvas id="canvas" width="800" height="600" style="border:1px solid #000000;"></canvas>
+    </div>
+</body>
+</html>
