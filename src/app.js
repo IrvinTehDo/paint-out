@@ -44,13 +44,24 @@ const roomInit = (roomName, reqSocket) => {
   rooms[roomName] = {
     roomName,
     status: 'waiting',
-    time: 45,
+    time: 5,
     players: {},
   };
 
   roomTimerFuncs[roomName] = setInterval(() => {
     rooms[roomName].time -= 1;
-    io.in(roomName).emit('updateTime', rooms[roomName].time);
+    const curRoomStatus = rooms[roomName].status;
+    io.in(roomName).emit('updateTime', rooms[roomName].time, curRoomStatus);
+    if (rooms[roomName].time === 0 && curRoomStatus === 'waiting') {
+      rooms[roomName].status = 'playing';
+      rooms[roomName].time = 5;
+    } else if (rooms[roomName].time === 0 && curRoomStatus === 'playing') {
+      rooms[roomName].status = 'end';
+      rooms[roomName].time = 30;
+      console.log('requesting image to score game');
+      io.in(roomName).emit('scoreGame');
+      clearInterval(roomTimerFuncs[roomName]);
+    }
   }, 1000);
 
   console.log(`${roomName} created`);
@@ -71,6 +82,68 @@ const roomJoin = (roomName, reqSocket) => {
 
   console.log(`Joined Room: ${roomName}`);
   return true;
+};
+
+const scoreGame = (gameImg, roomName, imgLength) => {
+  console.log('image recieved, calculating');
+  // rgb purple
+  let purpleScore = 0;
+  let redScore = 0;
+  let blueScore = 0;
+  let greenScore = 0;
+
+  console.dir(imgLength);
+
+  for (let i = 0; i < imgLength; i += 4) {
+    // RGBA of Purple
+    if (gameImg[i] === 128 &&
+        gameImg[i + 1] === 0 &&
+        gameImg[i + 2] === 128 &&
+        gameImg[i + 3] === 255) purpleScore += 1;
+    // RGBA of Red
+    else if (gameImg[i] === 255 &&
+               gameImg[i + 1] === 0 &&
+               gameImg[i + 2] === 0 &&
+               gameImg[i + 3] === 255) redScore += 1;
+    // RGBA of Green
+    else if (gameImg[i] === 0 &&
+               gameImg[i + 1] === 255 &&
+               gameImg[i + 2] === 0 &&
+               gameImg[i + 3] === 255) greenScore += 1;
+    // RGBA of Blue
+    else if (gameImg[i] === 0 &&
+               gameImg[i + 1] === 0 &&
+               gameImg[i + 2] === 255 &&
+               gameImg[i + 3] === 255) blueScore += 1;
+  }
+
+  if (purpleScore > redScore && purpleScore > blueScore && purpleScore > greenScore) {
+    // Purple Wins
+    console.log('purple');
+    io.in(roomName).emit('results', 'Purple Wins');
+  } else if (redScore > purpleScore && redScore > blueScore && redScore > greenScore) {
+    // Red Wins
+    console.log('red');
+    io.in(roomName).emit('results', 'Red Wins');
+  } else if (blueScore > purpleScore && blueScore > redScore && blueScore > greenScore) {
+    // Blue Wins
+    console.log('blue');
+    io.in(roomName).emit('results', 'Blue Wins');
+  } else if (greenScore > purpleScore && greenScore > redScore && greenScore > blueScore) {
+    // Green Wins
+    console.log('green');
+    io.in(roomName).emit('results', 'Green Wins');
+  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
+    // 4 way tie
+  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
+    // 4 way tie
+  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
+    // 4 way tie
+  } else {
+    // Error Default
+    console.log('no one');
+    io.in(roomName).emit('results', 'Nobody Wins');
+  }
 };
 
 
@@ -97,6 +170,8 @@ io.on('connection', (sock) => {
   rooms.lobby.players[socket.player.hash] = socket.player;
 
   socket.emit('joined', socket.player, rooms.lobby);
+
+  socket.on('sendRedCanvas', scoreGame);
 
   socket.on('createRoom', (roomName) => {
     if (roomInit(roomName, socket)) {
