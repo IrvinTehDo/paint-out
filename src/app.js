@@ -44,7 +44,7 @@ const roomInit = (roomName, reqSocket) => {
   rooms[roomName] = {
     roomName,
     status: 'waiting',
-    time: 5,
+    time: 30,
     players: {},
   };
 
@@ -54,7 +54,7 @@ const roomInit = (roomName, reqSocket) => {
     io.in(roomName).emit('updateTime', rooms[roomName].time, curRoomStatus);
     if (rooms[roomName].time === 0 && curRoomStatus === 'waiting') {
       rooms[roomName].status = 'playing';
-      rooms[roomName].time = 5;
+      rooms[roomName].time = 60;
     } else if (rooms[roomName].time === 0 && curRoomStatus === 'playing') {
       //      rooms[roomName].status = 'end';
       //      rooms[roomName].time = 30;
@@ -143,7 +143,7 @@ const scoreGame = (gameImg, roomName, imgLength) => {
     io.in(roomName).emit('results', 'There is no clear winner');
   }
   rooms[roomName].status = 'ending';
-  rooms[roomName].time = 5;
+  rooms[roomName].time = 30;
 
   roomTimerFuncs[roomName] = setInterval(() => {
     rooms[roomName].time -= 1;
