@@ -115,9 +115,7 @@ const redraw = (time) => {
         updateMovement();
         drawPlayer();
         requestAnimationFrame(redraw);
-    } else if(room.status === 'end'){
-        
-    } 
+    }
 };
 
 const updateMovement = () => {
@@ -137,7 +135,7 @@ const roomJoined = (reqRoom) => {
 const updateTime = (time, status) => {
     room.time = time;
     room.status = status;
-    timer.textContent = `Room Status: ${room.status} Time: ${room.time}`;
+    timer.textContent = `Room Status: ${room.status} | Time: ${room.time}`;
 };
 
 const sendRedCanvas = () => {
@@ -154,6 +152,8 @@ const sendRedCanvas = () => {
 const handleResults = (results) => {
     ctx.font = "30px Arial";
     ctx.fillStyle = "black";
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
     ctx.fillText(results, canvas.width/2, canvas.height/2);
     console.log(results);
 };
@@ -184,6 +184,7 @@ const joinRoom = (e, roomName, create) => {
 const forceMoveToLobby = () => {
     socket.emit('moveToLobby', room.roomName);
     clearCanvas();
+    timer.textContent = `Room Status: Lobby | Time: ???`
 };
 
 
@@ -269,11 +270,59 @@ const clearCanvas = (data) => {
         
         window.onload = init;
     </script>
+    <style>
+        h1{
+            margin: auto;
+            text-align: center;
+            width:50%;
+
+        }
+        
+        #errorContainer{
+            margin: auto;
+            width:50%;
+            text-align: center;
+        }
+        
+        #roomContainer{
+            margin: auto;
+            width:50%;
+            text-align: center;
+        }
+        
+        #createRoomForm{
+            
+        }
+        
+        #joinRoomForm{
+            
+        }
+        
+        #canvasContainer{
+            margin: auto;
+            width:50%;
+            text-align: center;
+            
+        }
+        #canvas{
+        }
+        
+        #roomName{
+        }
+        
+        #timer{
+        }
+        
+
+    </style>
 </head>
 <body>
     <div id="errorContainer">
         <section id="error"> </section>
     </div>
+    
+    <h1>Paint Out!</h1>
+    
     <div id="roomContainer">
         <form id="createRoomForm">
             <label for="createRoom">Create a Room</label>
@@ -291,7 +340,7 @@ const clearCanvas = (data) => {
     <div id="canvasContainer">
         <h2 id="roomName">Room: lobby</h2>
         <canvas id="canvas" width="800" height="600" style="border:1px solid #000000;"></canvas>
-        <h2 id="timer">Time: ???</h2>
+        <h2 id="timer">Room Status: Lobby | Time: ???</h2>
     </div>
 </body>
 </html>
