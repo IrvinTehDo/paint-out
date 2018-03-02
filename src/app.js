@@ -14,12 +14,12 @@ rooms.lobby = {
   players: {},
 };
 
+// Sends client file.
 const handler = (req, res) => {
   fs.readFile(`${__dirname}/../client/index.html`, (err, data) => {
     if (err) {
       throw err;
     }
-
     res.writeHead(200);
     res.end(data);
   });
@@ -34,9 +34,6 @@ const io = socketio(app);
 // To create and initialize a room
 const roomInit = (roomName, reqSocket) => {
   if (rooms[roomName]) {
-    // Error Here, room is already created
-    // socket emit error to requester
-    console.log(`${roomName} already exists`);
     reqSocket.emit('roomError', `${roomName} already exists`);
     return false;
   }
@@ -48,6 +45,7 @@ const roomInit = (roomName, reqSocket) => {
     players: {},
   };
 
+  // Update and Game State loop for our game. Emits to the user time and state and updates them.
   roomTimerFuncs[roomName] = setInterval(() => {
     rooms[roomName].time -= 1;
     const curRoomStatus = rooms[roomName].status;
@@ -56,48 +54,36 @@ const roomInit = (roomName, reqSocket) => {
       rooms[roomName].status = 'playing';
       rooms[roomName].time = 60;
     } else if (rooms[roomName].time === 0 && curRoomStatus === 'playing') {
-      //      rooms[roomName].status = 'end';
-      //      rooms[roomName].time = 30;
-      console.log('requesting image to score game');
       io.in(roomName).emit('scoreGame');
       clearInterval(roomTimerFuncs[roomName]);
     }
   }, 1000);
 
-  console.log(`${roomName} created`);
   return true;
 };
 
+// Handles User's join room requests. Returns true if they can join,
+// False with error message if they cant.
 const roomJoin = (roomName, reqSocket) => {
   if (!rooms[roomName]) {
-    // socket emit error to requester that it doesnt exist.
-    console.log(`${roomName} does not exist`);
     reqSocket.emit('roomError', `${roomName} does not exist`);
     return false;
   } else if (Object.keys(rooms[roomName].players).length >= 4) {
-    console.log(`${roomName} is full`);
     reqSocket.emit('roomError', `${roomName} is full`);
     return false;
   } else if (rooms[roomName].status !== 'waiting') {
-    console.log(`${roomName} is not accepting more players`);
     reqSocket.emit('roomError', `${roomName} is not accepting more players`);
     return false;
   }
-
-  console.log(`Joined Room: ${roomName}`);
   return true;
 };
 
+// Scores the game based on image recieved.
 const scoreGame = (gameImg, roomName, imgLength) => {
-  // console.log('image recieved, calculating');
-  // rgb purple
   let purpleScore = 0;
   let redScore = 0;
   let blueScore = 0;
   let greenScore = 0;
-
-  // console.dir(imgLength);
-
   for (let i = 0; i < imgLength; i += 4) {
     // RGBA of Purple
     if (gameImg[i] === 128 &&
@@ -122,29 +108,20 @@ const scoreGame = (gameImg, roomName, imgLength) => {
   }
 
   if (purpleScore > redScore && purpleScore > blueScore && purpleScore > greenScore) {
-    // Purple Wins
-    console.log('purple');
     io.in(roomName).emit('results', 'Purple Wins');
   } else if (redScore > purpleScore && redScore > blueScore && redScore > greenScore) {
-    // Red Wins
-    console.log('red');
     io.in(roomName).emit('results', 'Red Wins');
   } else if (blueScore > purpleScore && blueScore > redScore && blueScore > greenScore) {
-    // Blue Wins
-    console.log('blue');
     io.in(roomName).emit('results', 'Blue Wins');
   } else if (greenScore > purpleScore && greenScore > redScore && greenScore > blueScore) {
-    // Green Wins
-    console.log('green');
     io.in(roomName).emit('results', 'Green Wins');
   } else {
-    // Error Default
-    console.log('There is no clear winner');
     io.in(roomName).emit('results', 'There is no clear winner');
   }
   rooms[roomName].status = 'ending';
   rooms[roomName].time = 30;
 
+  // Game ending loop, sent after results are emitted so users have the full time to see results.
   roomTimerFuncs[roomName] = setInterval(() => {
     rooms[roomName].time -= 1;
     const curRoomStatus = rooms[roomName].status;
@@ -156,9 +133,10 @@ const scoreGame = (gameImg, roomName, imgLength) => {
   }, 1000);
 };
 
-
+// Assigns all functions and defines the user when they connect to the client.
 io.on('connection', (sock) => {
   const socket = sock;
+  // Default room
   socket.join('lobby');
 
   socket.player = {
@@ -183,18 +161,22 @@ io.on('connection', (sock) => {
 
   socket.on('sendRedCanvas', scoreGame);
 
+  // When user requests to join a room, IF we can create it and join it, do it.
   socket.on('createRoom', (roomName) => {
     if (roomInit(roomName, socket)) {
       if (roomJoin(roomName, socket)) {
+        // If user is in lobby, remove them from the lobby.
         if (socket.player.roomName === 'lobby') {
           delete rooms.lobby.players[socket.player.hash];
-        } else {
+        } else { // If user is in another room, remove them from that room.
           delete rooms[socket.roomName].players[socket.player.hash];
         }
-        // socket.join(roomName);
+        // Assign player to that new room.
         socket.player.roomName = roomName;
         rooms[roomName].players[socket.player.hash] = socket.player;
 
+        // Determines how many players are already in that room and
+        // assigns the user to their specific corner and color based on join order
         const playerKeys = Object.keys(rooms[roomName].players);
         for (let i = 0; i < playerKeys.length; i++) {
           if (socket.player.hash === rooms[roomName].players[playerKeys[i]].hash) {
@@ -231,7 +213,6 @@ io.on('connection', (sock) => {
         }
         socket.join(roomName);
         socket.emit('roomJoined', rooms[roomName]);
-        console.dir(rooms);
       }
     }
   });
@@ -316,39 +297,39 @@ io.on('connection', (sock) => {
       }
       socket.join(roomName);
       socket.emit('roomJoined', rooms[roomName]);
-      console.dir(rooms);
     }
   });
 
+  // Moves the users back to the lobby
   socket.on('moveToLobby', (roomName) => {
-    // console.dir(rooms[roomName]);
     delete rooms[roomName].players[socket.player.hash];
     socket.player.roomName = 'lobby';
     rooms.lobby.players[socket.player.hash] = socket.player;
 
     socket.join('lobby');
     socket.emit('roomJoined', rooms.lobby);
+    // If there are no more players in that room, delete it.
     const playerKeys = Object.keys(rooms[roomName].players);
-    console.dir(playerKeys);
     if (playerKeys.length === 0) {
       delete rooms[roomName];
-      console.log(`Deleted room ${roomName}`);
-      console.dir(rooms);
     }
   });
 
+  // Update the player data based on data recieved from client and
+  // send it back to the other players.
   socket.on('movementUpdate', (data) => {
     socket.player = data;
     socket.player.lastUpdate = new Date().getTime();
     socket.broadcast.to(socket.player.roomName).emit('updatedMovement', socket.player);
   });
 
+  // Handles user disconnects, removes them from the room
   socket.on('disconnect', () => {
-    // io.sockets.in('lobby').emit('left', socket.player.hash);
-    if (rooms[socket.roomName]) {
-      socket.leave(socket.roomName);
-      if (rooms[socket.roomName].players[socket.player.hash]) {
-        delete rooms[socket.roomName].players[socket.player.hash];
+    io.sockets.in(socket.player.roomName).emit('left', socket.player.hash);
+    if (rooms[socket.player.roomName]) {
+      socket.leave(socket.player.roomName);
+      if (rooms[socket.player.roomName].players[socket.player.hash]) {
+        delete rooms[socket.player.roomName].players[socket.player.hash];
       }
     } else {
       socket.leave('lobby');

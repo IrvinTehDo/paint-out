@@ -15,18 +15,18 @@
     let moveUp = false;
     let moveRight = false;
     let moveLeft = false;
-//    let canMove = false;
 
     let room = {};
     let timer;
+    let playerIdentifier;
 
+// Initializes the user when they first connect to the page assigning them with a hash and default room to lobby.
 const setUser = (data, lobby) => {
     hash = data.hash;
     room = lobby;
-    console.dir(room);
-    console.log(hash);
 };
 
+// Update player movement information, location and last updated based on the data we recieve from the server.
 const update = (data) => {
         if(!room.players[data.hash]){
             room.players[data.hash] = data;
@@ -48,16 +48,18 @@ const update = (data) => {
     player.alpha = 0.05;
 };
 
-
+//Emits errors to client. Things like room is full, cant join room, and etc.
 const errorEmitter = (error) => {
     const errorContiner = document.querySelector("#error");
     errorContiner.innerHTML = error;
 };
 
+//Movement smoothing
 const lerp = (v0, v1, alpha) => {
     return (1-alpha) * v0 + alpha * v1;
 };
 
+//Update local player's posistion based on keys pressed.
 const updatePosition = () => {
     const player = room.players[hash];
     player.prevX = player.x;
@@ -82,6 +84,7 @@ const updatePosition = () => {
     player.alpha = 0.05;
 };
 
+//Draw all players based on current data on hand.
 const drawPlayer = () => {
     const keys = Object.keys(room.players);
     
@@ -101,12 +104,11 @@ const drawPlayer = () => {
     }
 }
 
+//Our physics and draw loop. Draws and Updates movements/locations based on game state.
 const redraw = (time) => {
-//    updatePosition();
-//    updateMovement();
-//    drawPlayer();
-    
     if(room.status === 'waiting'){
+        //Only call updateMovement() because we're waiting on players to join
+        // no need to let them move.
         updateMovement();
         drawPlayer();
         requestAnimationFrame(redraw);
@@ -118,46 +120,52 @@ const redraw = (time) => {
     }
 };
 
+// Tells server to update where we are in the map.
 const updateMovement = () => {
           socket.emit('movementUpdate', room.players[hash]);
 };
 
-
+// Called when we join a room, Updates labels and moves player to the room.
 const roomJoined = (reqRoom) => {
     const roomNameLabel = document.querySelector("#roomName");
     roomNameLabel.textContent = `Room: ${reqRoom.roomName}`;
     room = {};
     room = reqRoom;
+    if(reqRoom.roomName !== 'lobby') playerIdentifier.textContent = `You are: ${room.players[hash].color}`;
     requestAnimationFrame(redraw);
-    console.dir(room);
 };
 
+// Update time and status labels of the game.
 const updateTime = (time, status) => {
     room.time = time;
     room.status = status;
     timer.textContent = `Room Status: ${room.status} | Time: ${room.time}`;
 };
 
+//Sends the red player's canvas for scoring.
 const sendRedCanvas = () => {
-    console.log('attempting to send');
-    if(room.players[hash].color === 'red'){
-        const canvasImg = ctx.getImageData(0,0,canvas.width, canvas.height);
-        console.log(`${hash} sending image ${canvasImg}`);
-        console.dir(canvasImg);
-        console.dir(canvasImg.data.length);
-        socket.emit('sendRedCanvas', canvasImg.data, room.roomName, canvasImg.data.length);
-    }
+        if(room.players[hash].color === 'red'){
+            const canvasImg = ctx.getImageData(0,0,canvas.width, canvas.height);
+            socket.emit('sendRedCanvas', canvasImg.data, room.roomName, canvasImg.data.length);
+        }
+
 };
 
+// Takes results from server and paints it onto the canvas for all players to see.
 const handleResults = (results) => {
     ctx.font = "30px Arial";
     ctx.fillStyle = "black";
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     ctx.fillText(results, canvas.width/2, canvas.height/2);
-    console.log(results);
 };
 
+//Handles Players Disconnecting.
+const handleDisconnect = (disconnectHash) => {
+    delete room.players[disconnectHash];
+};
+
+// Handles join/create room button. Only allows users to join rooms only if they're in the lobby.
 const joinRoom = (e, roomName, create) => {
     
     if(room.roomName != 'lobby') {
@@ -181,13 +189,15 @@ const joinRoom = (e, roomName, create) => {
     return false;
 };
 
+// Forces the user to move back to lobby. Used for end of game cleanup.
 const forceMoveToLobby = () => {
     socket.emit('moveToLobby', room.roomName);
     clearCanvas();
-    timer.textContent = `Room Status: Lobby | Time: ???`
+    timer.textContent = `Room Status: Lobby | Time: ???`;
+    playerIdentifier.textContent = 'You are: Nobody';
 };
 
-
+//Key Handler for movement
 const keyDownHandler = (e) => {  
           var keyPressed = e.which;
 
@@ -211,7 +221,7 @@ const keyDownHandler = (e) => {
             e.preventDefault();
           }
         };
-
+//Key Handler for movement
 const keyUpHandler = (e) => {
           var keyPressed = e.which;
 
@@ -233,10 +243,10 @@ const keyUpHandler = (e) => {
     
         };
 
-
-const clearCanvas = (data) => {
-    ctx.clearRect(0,0,600,800);
-};
+// Clears Canvas
+        const clearCanvas = (data) => {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+        };
         
         const init = () => {
             canvas = document.getElementById("canvas");
@@ -253,6 +263,7 @@ const clearCanvas = (data) => {
             socket.on('updatedMovement', update);
             socket.on('scoreGame', sendRedCanvas);
             socket.on('results', handleResults);
+            socket.on('left', handleDisconnect);
             
             const createRoomForm = document.querySelector('#createRoomForm');
             const sendCreateReq = (e) => joinRoom(e, createRoomForm.querySelector("#createRoomField").value, true);
@@ -263,6 +274,7 @@ const clearCanvas = (data) => {
             joinRoomForm.addEventListener('submit', sendJoinReq);
             
             timer = document.querySelector('#timer');
+            playerIdentifier = document.querySelector('#player');
             
             document.body.addEventListener('keydown', keyDownHandler);
             document.body.addEventListener('keyup', keyUpHandler);
@@ -271,11 +283,17 @@ const clearCanvas = (data) => {
         window.onload = init;
     </script>
     <style>
+        @import url('https://fonts.googleapis.com/css?family=Revalia|Roboto|Stalinist+One');
+        
+        body{
+            background-color: #bad4ff;
+        }
         h1{
             margin: auto;
             text-align: center;
             width:50%;
-
+            font-family: 'Stalinist One';
+            font-size: 42px;
         }
         
         #errorContainer{
@@ -290,29 +308,46 @@ const clearCanvas = (data) => {
             text-align: center;
         }
         
+        #roomContainer label{
+            font-family: 'Roboto', sans-serif;
+        }
+        
         #createRoomForm{
-            
+            margin-bottom: 1%;
+            margin-top: 1%;
         }
         
         #joinRoomForm{
-            
+            margin-bottom: 1%;
+            margin-top: 1%;
         }
         
         #canvasContainer{
             margin: auto;
             width:50%;
-            text-align: center;
-            
+            text-align: center;   
         }
         #canvas{
+            background-color: #fff;
+        }
+   
+        #helpContainer{
+            margin: auto;
+            width:50%;
+            text-align: center;
         }
         
-        #roomName{
+        #helpContainer h2{
+            font-size: 28px;
         }
         
-        #timer{
+        #helpContainer p{
+            font-family: 'Roboto', sans-serif;
         }
         
+        #help{
+            font-family: 'Revalia';
+        }
 
     </style>
 </head>
@@ -336,11 +371,18 @@ const clearCanvas = (data) => {
         </form>
     </div>
     
-    
     <div id="canvasContainer">
         <h2 id="roomName">Room: lobby</h2>
+        <h2 id="player">You are: Nobody</h2>
         <canvas id="canvas" width="800" height="600" style="border:1px solid #000000;"></canvas>
         <h2 id="timer">Room Status: Lobby | Time: ???</h2>
+    </div>
+
+    <div id="helpContainer">
+        <h2 id="help">How To Play</h2>
+        <p>Cover more of the canvas than the opposing players before the timer hits 0 to win!</p>
+        <p>Move using WASD</p>
+        <p>The game starts when the waiting timer hits 0.</p>
     </div>
 </body>
 </html>
