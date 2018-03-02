@@ -107,9 +107,10 @@ const redraw = (time) => {
 //    drawPlayer();
     
     if(room.status === 'waiting'){
+        updateMovement();
         drawPlayer();
         requestAnimationFrame(redraw);
-    } else if(room.status === 'playing'){
+    } else if(room.status === 'playing' && room.time > 0){
         updatePosition();
         updateMovement();
         drawPlayer();
@@ -136,15 +137,7 @@ const roomJoined = (reqRoom) => {
 const updateTime = (time, status) => {
     room.time = time;
     room.status = status;
-    timer.textContent = `Time: ${room.time}`;
-};
-
-const gameStart = () => {
-    //canMove = true;
-};
-
-const gameFinished = () => {
-    //canMove = false;
+    timer.textContent = `Room Status: ${room.status} Time: ${room.time}`;
 };
 
 const sendRedCanvas = () => {
@@ -159,11 +152,19 @@ const sendRedCanvas = () => {
 };
 
 const handleResults = (results) => {
+    ctx.font = "30px Arial";
+    ctx.fillStyle = "black";
     ctx.fillText(results, canvas.width/2, canvas.height/2);
     console.log(results);
 };
 
 const joinRoom = (e, roomName, create) => {
+    
+    if(room.roomName != 'lobby') {
+        e.preventDefault();
+        return false;
+    }
+    
     if(create){
         socket.emit('createRoom', roomName);
     }
@@ -178,6 +179,11 @@ const joinRoom = (e, roomName, create) => {
     
     e.preventDefault();
     return false;
+};
+
+const forceMoveToLobby = () => {
+    socket.emit('moveToLobby', room.roomName);
+    clearCanvas();
 };
 
 
@@ -240,11 +246,9 @@ const clearCanvas = (data) => {
             socket.on('joined', setUser);
             
             socket.on('roomError', errorEmitter);
-            
+            socket.on('forceMoveToLobby', forceMoveToLobby);
             socket.on('updateTime', updateTime);
             socket.on('roomJoined', roomJoined);
-            socket.on('gameStart', gameStart);
-            socket.on('gameFinished', gameFinished);
             socket.on('updatedMovement', update);
             socket.on('scoreGame', sendRedCanvas);
             socket.on('results', handleResults);

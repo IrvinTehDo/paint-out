@@ -56,8 +56,8 @@ const roomInit = (roomName, reqSocket) => {
       rooms[roomName].status = 'playing';
       rooms[roomName].time = 5;
     } else if (rooms[roomName].time === 0 && curRoomStatus === 'playing') {
-      rooms[roomName].status = 'end';
-      rooms[roomName].time = 30;
+      //      rooms[roomName].status = 'end';
+      //      rooms[roomName].time = 30;
       console.log('requesting image to score game');
       io.in(roomName).emit('scoreGame');
       clearInterval(roomTimerFuncs[roomName]);
@@ -78,6 +78,10 @@ const roomJoin = (roomName, reqSocket) => {
     console.log(`${roomName} is full`);
     reqSocket.emit('roomError', `${roomName} is full`);
     return false;
+  } else if (rooms[roomName].status !== 'waiting') {
+    console.log(`${roomName} is not accepting more players`);
+    reqSocket.emit('roomError', `${roomName} is not accepting more players`);
+    return false;
   }
 
   console.log(`Joined Room: ${roomName}`);
@@ -85,14 +89,14 @@ const roomJoin = (roomName, reqSocket) => {
 };
 
 const scoreGame = (gameImg, roomName, imgLength) => {
-  console.log('image recieved, calculating');
+  // console.log('image recieved, calculating');
   // rgb purple
   let purpleScore = 0;
   let redScore = 0;
   let blueScore = 0;
   let greenScore = 0;
 
-  console.dir(imgLength);
+  // console.dir(imgLength);
 
   for (let i = 0; i < imgLength; i += 4) {
     // RGBA of Purple
@@ -133,17 +137,23 @@ const scoreGame = (gameImg, roomName, imgLength) => {
     // Green Wins
     console.log('green');
     io.in(roomName).emit('results', 'Green Wins');
-  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
-    // 4 way tie
-  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
-    // 4 way tie
-  } else if (purpleScore === redScore && purpleScore === blueScore && purpleScore === greenScore) {
-    // 4 way tie
   } else {
     // Error Default
-    console.log('no one');
-    io.in(roomName).emit('results', 'Nobody Wins');
+    console.log('There is no clear winner');
+    io.in(roomName).emit('results', 'There is no clear winner');
   }
+  rooms[roomName].status = 'ending';
+  rooms[roomName].time = 5;
+
+  roomTimerFuncs[roomName] = setInterval(() => {
+    rooms[roomName].time -= 1;
+    const curRoomStatus = rooms[roomName].status;
+    io.in(roomName).emit('updateTime', rooms[roomName].time, curRoomStatus);
+    if (rooms[roomName].time === 0 && curRoomStatus === 'ending') {
+      io.in(roomName).emit('forceMoveToLobby');
+      clearInterval(roomTimerFuncs[roomName]);
+    }
+  }, 1000);
 };
 
 
@@ -306,6 +316,23 @@ io.on('connection', (sock) => {
       }
       socket.join(roomName);
       socket.emit('roomJoined', rooms[roomName]);
+      console.dir(rooms);
+    }
+  });
+
+  socket.on('moveToLobby', (roomName) => {
+    // console.dir(rooms[roomName]);
+    delete rooms[roomName].players[socket.player.hash];
+    socket.player.roomName = 'lobby';
+    rooms.lobby.players[socket.player.hash] = socket.player;
+
+    socket.join('lobby');
+    socket.emit('roomJoined', rooms.lobby);
+    const playerKeys = Object.keys(rooms[roomName].players);
+    console.dir(playerKeys);
+    if (playerKeys.length === 0) {
+      delete rooms[roomName];
+      console.log(`Deleted room ${roomName}`);
       console.dir(rooms);
     }
   });
